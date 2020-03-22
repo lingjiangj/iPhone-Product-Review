@@ -1,0 +1,1448 @@
+---
+title: "Tob_FunWordThings"
+date: "2/10/2020"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(tidytext)
+library(RColorBrewer)
+library(wordcloud)
+library(igraph)
+library(ggraph)
+```
+
+```{r}
+alldata <- read_csv('alldata.csv')
+```
+
+## Summarizing Text
+```{r}
+iphone8reviewsT <- filter(alldata, Type == 'iphone8') %>%
+  unnest_tokens(word,Text) %>%
+  anti_join(stop_words)
+
+wordFreq <- iphone8reviewsT %>%
+  count(word,sort = T)
+
+wordFreq %>%
+  slice(1:25) %>%
+  ggplot(aes(x=fct_reorder(word,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip() +
+  scale_y_continuous(labels=comma)+
+  labs(x='Word',
+       y='Word  Frequency',
+       title = 'Top Words in iPhone8 Reviews',
+       subtitle = paste0('Based on ',nrow(filter(alldata, Type == 'iphone8')),' reviews')
+  )
+```
+```{r}
+alldataT <- alldata %>%
+  select(Heading, Text, Rating, Time, Type) %>%
+  unnest_tokens(word,Text)
+
+nPhones <- alldata %>%
+  count(Type) %>%
+  arrange(desc(n))
+
+tmp <- alldataT %>%
+  count(Type,word) %>%
+  bind_tf_idf(word,Type,n) %>%
+  group_by(Type) %>%
+  arrange(desc(tf_idf)) %>%
+  slice(1:15) %>% # get top 15 words in terms of tf-idf
+  ungroup() %>%
+  mutate(xOrder=n():1)
+
+tmp %>%
+  filter(Type %in% nPhones$Type) %>%
+  ggplot(aes(x=xOrder,y=tf_idf,fill=as.factor(Type))) + 
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~ Type,scales='free') +
+  scale_x_continuous(breaks = tmp$xOrder,
+                     labels = tmp$word,
+                     expand = c(0,0)) + 
+  coord_flip()+ theme_bw() + 
+  labs(x='Word',y='Word  Frequency',
+       title = 'Review Contents',
+       subtitle = 'Top TF-IDF Words used in Reviews by Type')
+
+
+```
+
+```{r}
+iphone8TBi <- filter(alldata, Type == 'iphone8') %>%
+  unnest_tokens(bigram,Text, token = "ngrams", n = 2)
+
+topWords <- iphone8TBi %>%
+  count(bigram, sort = T) %>%
+  separate(bigram, c("word1", "word2"), sep = " ", remove = F) %>%
+  slice(1:25) %>%
+  ungroup() %>%
+  mutate(xOrder=n():1)
+
+topWords %>%
+  ggplot(aes(x=xOrder,y=n)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_x_continuous(breaks = topWords$xOrder,labels = topWords$bigram,expand = c(0,0)) + 
+  coord_flip()+ theme_bw()+ theme(legend.position = "none")+
+  labs(x='Word',y='Word  Frequency',
+       title = 'Top Bigrams for iPhone 8 Reviews')
+
+
+```
+
+```{r}
+iphoneXTBi <- filter(alldata, Type == 'iphoneX') %>%
+  unnest_tokens(bigram,Text, token = "ngrams", n = 2)
+
+topWords <- iphoneXTBi %>%
+  count(bigram, sort = T) %>%
+  separate(bigram, c("word1", "word2"), sep = " ", remove = F) %>%
+  slice(1:25) %>%
+  ungroup() %>%
+  mutate(xOrder=n():1)
+
+topWords %>%
+  ggplot(aes(x=xOrder,y=n)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_x_continuous(breaks = topWords$xOrder,labels = topWords$bigram,expand = c(0,0)) + 
+  coord_flip()+ theme_bw()+ theme(legend.position = "none")+
+  labs(x='Word',y='Word  Frequency',
+       title = 'Top Bigrams for iPhone X Reviews')
+
+
+```
+
+```{r}
+iphone11promaxTBi <- filter(alldata, Type == 'iphone11promax') %>%
+  unnest_tokens(bigram,Text, token = "ngrams", n = 2)
+
+topWords <- iphone11promaxTBi %>%
+  count(bigram, sort = T) %>%
+  separate(bigram, c("word1", "word2"), sep = " ", remove = F) %>%
+  slice(1:25) %>%
+  ungroup() %>%
+  mutate(xOrder=n():1)
+
+topWords %>%
+  ggplot(aes(x=xOrder,y=n)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_x_continuous(breaks = topWords$xOrder,labels = topWords$bigram,expand = c(0,0)) + 
+  coord_flip()+ theme_bw()+ theme(legend.position = "none")+
+  labs(x='Word',y='Word  Frequency',
+       title = 'Top Bigrams for iPhone 11 Pro Max Reviews')
+
+
+```
+
+```{r}
+alldata %>%
+  group_by(Type) %>%
+  unnest_tokens(bigram,Text,token="ngrams",n=2) %>%
+  count(bigram) %>%
+  arrange(desc(n)) %>%
+  top_n(10) %>%
+  ggplot(aes(x=reorder_within(bigram, n, Type),
+             y=n, fill = factor(Type))) + 
+  geom_bar(stat='identity') + scale_x_reordered() +
+  facet_wrap(~ Type,scales='free', ncol = 3) +
+  coord_flip() +
+  theme(legend.position = "none")+
+  labs(title = 'Top Title Bigrams in Different Phone Types',
+       x = 'Bigram',
+       y = 'Count')
+```
+
+```{r}
+customWords <- c('iphone','phone', '8', 'apple')
+
+topWords <- iphone8TBi %>%
+  count(bigram, sort = T) %>%
+  separate(bigram, c("word1", "word2"), sep = " ", remove = F) %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word1 %in% customWords,
+         !word2 %in% customWords,
+         !word1 %in% customWords,
+         !word2 %in% customWords
+  ) %>%
+  slice(1:25) %>%
+  ungroup() %>%
+  mutate(xOrder=n():1)
+
+topWords %>%
+  ggplot(aes(x=xOrder,y=n)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_x_continuous(breaks = topWords$xOrder,labels = topWords$bigram,expand = c(0,0)) + 
+  coord_flip()+ theme_bw()+ theme(legend.position = "none")+
+  labs(x='Bigram',y='Frequency',
+       title = 'Top Bigrams, iPhone 8',
+       subtitle = 'Stop-words removed')
+```
+
+```{r}
+
+customWords <- c('iphone','phone', 'X', 'apple')
+
+topWords <- iphoneXTBi %>%
+  count(bigram, sort = T) %>%
+  separate(bigram, c("word1", "word2"), sep = " ", remove = F) %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word1 %in% customWords,
+         !word2 %in% customWords,
+         !word1 %in% customWords,
+         !word2 %in% customWords
+  ) %>%
+  slice(1:25) %>%
+  ungroup() %>%
+  mutate(xOrder=n():1)
+
+topWords %>%
+  ggplot(aes(x=xOrder,y=n)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_x_continuous(breaks = topWords$xOrder,labels = topWords$bigram,expand = c(0,0)) + 
+  coord_flip()+ theme_bw()+ theme(legend.position = "none")+
+  labs(x='Bigram',y='Frequency',
+       title = 'Top Bigrams, iPhone X',
+       subtitle = 'Stop-words removed')
+```
+
+```{r}
+customWords <- c('iphone','phone', '11', 'apple', 'pro', 'max','color','midnight', 'green')
+
+topWords <- iphone11promaxTBi %>%
+  count(bigram, sort = T) %>%
+  separate(bigram, c("word1", "word2"), sep = " ", remove = F) %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word1 %in% customWords,
+         !word2 %in% customWords,
+         !word1 %in% customWords,
+         !word2 %in% customWords
+  ) %>%
+  slice(1:25) %>%
+  ungroup() %>%
+  mutate(xOrder=n():1)
+
+topWords %>%
+  ggplot(aes(x=xOrder,y=n)) + 
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  scale_x_continuous(breaks = topWords$xOrder,labels = topWords$bigram,expand = c(0,0)) + 
+  coord_flip()+ theme_bw()+ theme(legend.position = "none")+
+  labs(x='Bigram',y='Frequency',
+       title = 'Top Bigrams, iPhone 11 Pro Max',
+       subtitle = 'Stop-words removed')
+```
+
+## Sentiment Analysis
+
+```{r}
+library(knitr)
+install.packages("sentimentr")
+library(sentimentr)
+install.packages("textdata")
+library(textdata)
+install.packages("ggridges")
+library(ggridges)
+```
+
+### iPhone8 Average Sentiment
+```{r}
+reviewsTidy <- filter(alldata, Type == 'iphone8') %>%
+  unnest_tokens(word,Text) 
+
+reviewsLength <- reviewsTidy %>%
+  count(X1) %>%
+  rename(reviewLength = n)
+  
+sentRev <- reviewsTidy %>%
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(X1) %>%
+  summarize(sentiment = sum(value)) %>%
+  left_join(reviewsLength,by='X1') %>%
+  mutate(aveSentiment = sentiment/reviewLength)
+
+sentByStar8 <- sentRev %>%
+  left_join(select(filter(alldata, Type == 'iphone8'),X1,Rating), by='X1')
+
+
+nReviews <- nrow(filter(alldata, Type == 'iphone8'))
+
+sentByStar8 %>%
+  group_by(Rating) %>%
+  summarize(meanSent = mean(aveSentiment)) %>%
+  mutate(Rating=factor(Rating)) %>%
+  ggplot(aes(x=Rating,y=meanSent,color=Rating)) + geom_point(size=5,show.legend = F) + 
+  geom_hline(aes(yintercept=0)) +
+  labs(title='Average Sentiment by Review Rating',
+       subtitle = paste0(nReviews,'Best Buy reviews of the iPhone 8'),
+       x = 'Review Star Rating',
+       y = 'Average Sentiment')
+
+```
+
+```{r}
+
+sentByStar8 %>%
+  mutate(Rating=factor(Rating)) %>% 
+  ggplot(aes(x = aveSentiment, y = Rating, group = Rating,fill=Rating)) +
+  geom_density_ridges(scale = 2.0, size = 0.25,alpha=0.4,show.legend=F) +
+  scale_x_continuous(limits=c(-.2, 0.8), expand = c(0.01, 0)) +
+  theme_bw() + 
+  geom_vline(aes(xintercept=0)) + 
+  labs(x = 'Review Sentiment',
+       y = 'Review Rating',
+       title = 'Distribution of Review Sentiment by Review Star Rating',
+       subtitle = paste0(nReviews, ' Reviews of iPhone 8'))
+
+
+```
+
+### iPhoneX Average Sentiment
+```{r}
+reviewsTidy <- filter(alldata, Type == 'iphoneX') %>%
+  unnest_tokens(word,Text) 
+
+reviewsLength <- reviewsTidy %>%
+  count(X1) %>%
+  rename(reviewLength = n)
+  
+sentRev <- reviewsTidy %>%
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(X1) %>%
+  summarize(sentiment = sum(value)) %>%
+  left_join(reviewsLength,by='X1') %>%
+  mutate(aveSentiment = sentiment/reviewLength)
+
+sentByStarX <- sentRev %>%
+  left_join(select(filter(alldata, Type == 'iphoneX'),X1,Rating), by='X1')
+
+
+nReviews <- nrow(filter(alldata, Type == 'iphoneX'))
+
+sentByStarX %>%
+  group_by(Rating) %>%
+  summarize(meanSent = mean(aveSentiment)) %>%
+  mutate(Rating=factor(Rating)) %>%
+  ggplot(aes(x=Rating,y=meanSent,color=Rating)) + geom_point(size=5,show.legend = F) + 
+  geom_hline(aes(yintercept=0)) +
+  labs(title='Average Sentiment by Review Rating',
+       subtitle = paste0(nReviews,'Best Buy reviews of the iPhone X'),
+       x = 'Review Star Rating',
+       y = 'Average Sentiment')
+
+```
+
+```{r}
+
+sentByStarX %>%
+  mutate(Rating=factor(Rating)) %>% 
+  ggplot(aes(x = aveSentiment, y = Rating, group = Rating,fill=Rating)) +
+  geom_density_ridges(scale = 2.0, size = 0.25,alpha=0.4,show.legend=F) +
+  scale_x_continuous(limits=c(-.2, 0.8), expand = c(0.01, 0)) +
+  theme_bw() + 
+  geom_vline(aes(xintercept=0)) + 
+  labs(x = 'Review Sentiment',
+       y = 'Review Rating',
+       title = 'Distribution of Review Sentiment by Review Star Rating',
+       subtitle = paste0(nReviews, ' Reviews of iPhone X'))
+
+
+```
+
+### iPhone 11 Pro Max Average Sentiment
+```{r}
+reviewsTidy <- filter(alldata, Type == 'iphone11promax') %>%
+  unnest_tokens(word,Text) 
+
+reviewsLength <- reviewsTidy %>%
+  count(X1) %>%
+  rename(reviewLength = n)
+  
+sentRev <- reviewsTidy %>%
+  inner_join(get_sentiments("afinn")) %>%
+  group_by(X1) %>%
+  summarize(sentiment = sum(value)) %>%
+  left_join(reviewsLength,by='X1') %>%
+  mutate(aveSentiment = sentiment/reviewLength)
+
+sentByStar11 <- sentRev %>%
+  left_join(select(filter(alldata, Type == 'iphone11promax'),X1,Rating), by='X1')
+
+
+nReviews <- nrow(filter(alldata, Type == 'iphone11promax'))
+
+sentByStar11 %>%
+  group_by(Rating) %>%
+  summarize(meanSent = mean(aveSentiment)) %>%
+  mutate(Rating=factor(Rating)) %>%
+  ggplot(aes(x=Rating,y=meanSent,color=Rating)) + geom_point(size=5,show.legend = F) + 
+  geom_hline(aes(yintercept=0)) +
+  labs(title='Average Sentiment by Review Rating',
+       subtitle = paste0(nReviews,'Best Buy reviews of the iPhone 11 Pro Max'),
+       x = 'Review Star Rating',
+       y = 'Average Sentiment')
+
+```
+
+```{r}
+
+sentByStar11 %>%
+  mutate(Rating=factor(Rating)) %>% 
+  ggplot(aes(x = aveSentiment, y = Rating, group = Rating,fill=Rating)) +
+  geom_density_ridges(scale = 2.0, size = 0.25,alpha=0.4,show.legend=F) +
+  scale_x_continuous(limits=c(-.2, 0.8), expand = c(0.01, 0)) +
+  theme_bw() + 
+  geom_vline(aes(xintercept=0)) + 
+  labs(x = 'Review Sentiment',
+       y = 'Review Rating',
+       title = 'Distribution of Review Sentiment by Review Star Rating',
+       subtitle = paste0(nReviews, ' Reviews of iPhone 11 Pro Max'))
+
+
+```
+
+### iPhone 8 Sentiment through Review
+```{r}
+
+plot_words <- filter(alldata, Type == 'iphone8')  %>%
+  unnest_tokens(word, Text)
+
+nReviews <- nrow(filter(alldata, Type == 'iphone8'))
+
+decile_counts <- plot_words %>%
+  group_by(X1) %>%
+  mutate(word_position = row_number() / n()) %>%
+  ungroup() %>%
+  mutate(decile = ceiling(word_position * 10) / 10) %>%
+  count(decile, word)
+
+
+nWordsByDec <- decile_counts %>%
+  count(decile,wt=n)
+
+
+AfinnVersion <- decile_counts %>%
+  inner_join(get_sentiments("afinn"), by = "word") %>%
+  group_by(decile) %>%
+  summarize(score = sum(value * n) / sum(n)) %>%
+  ggplot(aes(decile, score)) +
+  geom_line(color='red',size=2) +
+  scale_x_continuous(labels = percent_format()) +
+  expand_limits(y = 0) +
+  labs(title = "Average Sentiment by Position in Review",
+       subtitle = paste0("Average over ", nReviews ,"Reviews"),
+       x = "Position within Review",
+       caption = "Based on AFINN Sentiment Lexicon",
+       y = "Average Sentiment Score (higher is more positive)")
+
+BingVersion <- decile_counts %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%
+  group_by(decile,sentiment) %>%
+  summarize(Total = sum(n)) %>%
+  ggplot(aes(x=decile,y=Total,color=sentiment,group=sentiment)) + 
+  geom_line() + geom_point(size=3) +
+  scale_x_continuous(labels = percent_format()) +
+  labs(title = "Counts of Word Polarity By Position in Review",
+       subtitle = paste0(nReviews ," Reviews"),
+       x = "Position within Review",
+       caption = "Based on Bing Sentiment Lexicon",
+       y = "Count of Sentiment Loaded Words")
+```
+
+
+```{r, fig.height = 5.25, fig.width=9}
+AfinnVersion
+```
+
+
+```{r, fig.height = 5.25, fig.width=9}
+BingVersion
+```
+
+## Part of Speech Tagging
+### iPhone 8 POS Tagging
+```{r}
+install.packages('udpipe')
+library(udpipe)
+dl <- udpipe_download_model(language = "english")
+
+udmodel_english <- udpipe_load_model(file = 'english-ewt-ud-2.4-190531.udpipe')
+```
+
+```{r}
+iPhone8reviews <- filter(alldata, Type == 'iphone8')
+nReviews <- nrow(iPhone8reviews)
+
+x <- udpipe_annotate(udmodel_english, x = iPhone8reviews$Text, doc_id = as.numeric(iPhone8reviews$X1))
+x <- as.data.frame(x)
+x$doc_id <- as.numeric(x$doc_id)
+
+```
+
+```{r}
+all.pl <- x %>%
+  filter(upos=="NOUN") %>%
+  count(lemma,sort = T) %>%
+  slice(1:20) %>%
+  ggplot(aes(x=fct_reorder(lemma,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip()+
+  labs(title='Top Nouns Used in Reviews of iPhone 8 ',
+       subtitle = paste0(nReviews,' reviews for iPhone8'),
+       x = 'Noun',
+       y = 'Count')
+
+all.pl
+```
+
+```{r, fig.height=5.25,fig.width=9}
+
+tmp <- x %>%
+  filter(upos=="NOUN") %>%
+  inner_join(select(iPhone8reviews,X1,Rating),by=c('doc_id'='X1')) %>%
+  count(Rating,lemma) %>%
+  group_by(Rating) %>%
+  arrange(desc(n)) %>%
+  slice(1:30) %>%
+  filter(!lemma %in% c('phone', 'apple','iPhone','iphone')) %>%
+  ungroup() %>%
+  mutate(x = n():1)  # for plotting
+
+
+byStar.pl <- tmp %>%
+  mutate(Rating=factor(paste0(Rating,' star'))) %>%
+  ggplot(aes(x=x,y=n,fill=Rating)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~Rating,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                   labels = tmp$lemma,
+                   expand = c(0,0)) + 
+  labs(title='Top Nouns by Star Rating',
+       subtitle = paste0(nReviews,' reviews of iPhone 8'),
+       caption = 'Note: The nouns "iPhone", "Apple" and "Phone" has been removed.',
+       x = 'Noun',
+       y = 'Count')+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+byStar.pl
+```
+
+```{r, fig.height=5.25,fig.width=9}
+
+tmp <- x %>%
+  filter(upos=="ADJ") %>%
+  inner_join(select(iPhone8reviews,X1,Rating),by=c('doc_id'='X1')) %>%
+  count(Rating,lemma) %>%
+  group_by(Rating) %>%
+  arrange(desc(n)) %>%
+  slice(1:30) %>%
+  ungroup() %>%
+  mutate(x = n():1)  # for plotting
+
+byStar.pl <- tmp %>%
+  mutate(Rating=factor(paste0(Rating,' star'))) %>%
+  ggplot(aes(x=x,y=n,fill=Rating)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~Rating,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$lemma,
+                     expand = c(0,0)) + 
+  labs(title='Top Adjectives by Star Rating',
+       subtitle = paste0(nReviews,' reviews of iPhone 8'),
+       x = 'Noun',
+       y = 'Count')+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+byStar.pl
+```
+
+
+```{r, fig.height=5.5,fig.width=10}
+reviewsAnnStar <- x %>%
+  inner_join(select(iPhone8reviews,X1,Rating),by=c('doc_id'='X1')) 
+
+stats <- cooccurrence(x = filter(reviewsAnnStar, upos %in% c("NOUN", "ADJ")), 
+                      term = "lemma", 
+                      group = c("doc_id", "paragraph_id", "sentence_id"))
+
+wordnetwork <- head(stats,300)
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plAll <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences within same sentence", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plAll
+```
+
+```{r, fig.height=5.5,fig.width=10}
+
+stats <- cooccurrence(x = filter(reviewsAnnStar, upos %in% c("NOUN", "ADJ") & Rating %in% c(1,2,3)), 
+                      term = "lemma", 
+                      group = c("doc_id", "paragraph_id", "sentence_id"))
+
+
+wordnetwork <- head(stats,200)
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plLow <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences within same sentence - Dissatisfied Users",
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plLow
+
+```
+
+```{r, fig.height=5.5,fig.width=10}
+## How frequently do words follow one another?
+stats <- cooccurrence(x = reviewsAnnStar$lemma, 
+                      relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ"))
+
+wordnetwork <- head(stats,150)
+
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plAll <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences of Words Next to Each Other", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plAll
+```
+
+```{r, fig.height=5.5,fig.width=10}
+
+stats <- cooccurrence(x = reviewsAnnStar$lemma, 
+                      relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ") & 
+                        reviewsAnnStar$reviewRating %in% c(1,2,3))
+
+wordnetwork <- head(stats,150)
+
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plLow <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences of Words Next to Each Other - Dissatisfied Users", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plLow
+
+```
+
+```{r, fig.height=7,fig.width=10}
+
+tmpLeft <- reviewsAnnStar %>%
+  select(doc_id,paragraph_id,sentence_id,lemma,head_token_id,dep_rel,upos)
+
+tmpRight <- reviewsAnnStar %>%
+  select(doc_id,paragraph_id,sentence_id,token_id,lemma,upos)
+
+
+tmp2 <- tmpLeft %>%
+  left_join(tmpRight,
+            by=c('doc_id'='doc_id',
+                 'paragraph_id'='paragraph_id',
+                 'sentence_id'='sentence_id',
+                 'head_token_id'='token_id')
+  ) %>%
+  filter(dep_rel %in% "nsubj" & upos.x %in% c("NOUN") & upos.y %in% c("ADJ")) %>%
+  mutate(term = paste(lemma.y,lemma.x,sep=" ")) %>%
+  count(term,sort = T)
+
+
+plAll <- tmp2 %>%
+  head(40) %>%
+  ggplot(aes(x=fct_reorder(term,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip() +
+  labs(title='Top Keywords Extracted Using Dependency Parsing',
+       subtitle = paste0(nReviews,' reviews of iPhone 8'),
+       x = 'Keyword',
+       y = 'Frequency')
+
+plAll
+```
+
+```{r, fig.height=7,fig.width=10}
+
+tmpLeft <- reviewsAnnStar %>%
+  filter(Rating %in% c(1,2,3)) %>%
+  select(doc_id,paragraph_id,sentence_id,lemma,head_token_id,dep_rel,upos)
+  
+
+tmpRight <- reviewsAnnStar %>%
+  filter(Rating %in% c(1,2,3)) %>%
+  select(doc_id,paragraph_id,sentence_id,token_id,lemma,upos)
+
+
+tmp2 <- tmpLeft %>%
+  left_join(tmpRight,
+            by=c('doc_id'='doc_id',
+                 'paragraph_id'='paragraph_id',
+                 'sentence_id'='sentence_id',
+                 'head_token_id'='token_id')
+  ) %>%
+  filter(dep_rel %in% "nsubj" & upos.x %in% c("NOUN") & upos.y %in% c("ADJ")) %>%
+  mutate(term = paste(lemma.y,lemma.x,sep=" ")) %>%
+  count(term,sort = T)
+
+
+plLow <- tmp2 %>%
+  head(40) %>%
+  ggplot(aes(x=fct_reorder(term,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip() +
+  labs(title='Top Keywords Extracted Using Dependency Parsing',
+       subtitle = 'For reviews rated 1, 2 or 3 stars',
+       x = 'Keyword',
+       y = 'Frequency')
+
+plLow
+```
+
+
+```{r, fig.height=5,fig.width=5}
+
+statsAll <- keywords_rake(x = reviewsAnnStar, 
+                       term = "token", 
+                       group = c("doc_id", "paragraph_id", "sentence_id"),
+                       relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ"),
+                       ngram_max = 4) %>%
+  filter(freq > 100) %>%
+  arrange(desc(freq))
+
+
+tmp <- statsAll %>%
+  filter(ngram %in% c(1,2)) %>%
+  group_by(ngram) %>%
+  arrange(desc(freq)) %>%
+  slice(1:20) %>%
+  ungroup() %>%
+  mutate(x = n():1)
+
+plAll <- tmp %>%
+  mutate(ngram=factor(paste0('ngram=',ngram))) %>%
+  ggplot(aes(x=x,y=freq,fill=ngram)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~ngram,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$keyword,
+                     expand = c(0,0)) + 
+  labs(title='Top Keywords',
+       subtitle = 'Extracted using RAKE',
+       x = 'Keyword',
+       y = 'Count')
+
+plAll  
+
+
+```
+
+```{r, fig.height=5, fig.width=5}
+statsLow <- keywords_rake(x = reviewsAnnStar, 
+                          term = "token", 
+                          group = c("doc_id", "paragraph_id", "sentence_id"),
+                          relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ") & 
+                            reviewsAnnStar$Rating %in% c(1,2,3),
+                          ngram_max = 4) %>%
+  filter(freq > 100) %>%
+  arrange(desc(freq))
+
+
+tmp <- statsAll %>%
+  filter(ngram %in% c(1,2)) %>%
+  group_by(ngram) %>%
+  arrange(desc(freq)) %>%
+  slice(1:20) %>%
+  ungroup() %>%
+  mutate(x = n():1)
+
+plLow <- tmp %>%
+  mutate(ngram=factor(paste0('ngram=',ngram))) %>%
+  ggplot(aes(x=x,y=freq,fill=ngram)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~ngram,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$keyword,
+                     expand = c(0,0)) + 
+  labs(title='Top Keywords - Dissatisfied Users',
+       subtitle = 'Extracted using RAKE',
+       x = 'Keyword',
+       y = 'Count')
+
+plLow
+```
+### iPhone X POS Tagging
+
+```{r}
+iPhoneXreviews <- filter(alldata, Type == 'iphoneX')
+nReviews <- nrow(iPhoneXreviews)
+
+x <- udpipe_annotate(udmodel_english, x = iPhoneXreviews$Text, doc_id = as.numeric(iPhoneXreviews$X1))
+x <- as.data.frame(x)
+x$doc_id <- as.numeric(x$doc_id)
+
+```
+
+```{r}
+all.pl <- x %>%
+  filter(upos=="NOUN") %>%
+  count(lemma,sort = T) %>%
+  slice(1:20) %>%
+  ggplot(aes(x=fct_reorder(lemma,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip()+
+  labs(title='Top Nouns Used in Reviews of iPhone X ',
+       subtitle = paste0(nReviews,' reviews for iPhone X'),
+       x = 'Noun',
+       y = 'Count')
+
+all.pl
+```
+
+```{r, fig.height=5.25,fig.width=9}
+
+tmp <- x %>%
+  filter(upos=="NOUN") %>%
+  inner_join(select(iPhoneXreviews,X1,Rating),by=c('doc_id'='X1')) %>%
+  count(Rating,lemma) %>%
+  group_by(Rating) %>%
+  arrange(desc(n)) %>%
+  slice(1:30) %>%
+  filter(!lemma %in% c('phone', 'apple','iPhone','iphone')) %>%
+  ungroup() %>%
+  mutate(x = n():1)  # for plotting
+
+
+byStar.pl <- tmp %>%
+  mutate(Rating=factor(paste0(Rating,' star'))) %>%
+  ggplot(aes(x=x,y=n,fill=Rating)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~Rating,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                   labels = tmp$lemma,
+                   expand = c(0,0)) + 
+  labs(title='Top Nouns by Star Rating',
+       subtitle = paste0(nReviews,' reviews of iPhone X'),
+       caption = 'Note: The nouns "iPhone", "Apple" and "Phone" has been removed.',
+       x = 'Noun',
+       y = 'Count')+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+byStar.pl
+```
+
+```{r, fig.height=5.25,fig.width=9}
+
+tmp <- x %>%
+  filter(upos=="ADJ") %>%
+  inner_join(select(iPhoneXreviews,X1,Rating),by=c('doc_id'='X1')) %>%
+  count(Rating,lemma) %>%
+  group_by(Rating) %>%
+  arrange(desc(n)) %>%
+  slice(1:30) %>%
+  ungroup() %>%
+  mutate(x = n():1)  # for plotting
+
+byStar.pl <- tmp %>%
+  mutate(Rating=factor(paste0(Rating,' star'))) %>%
+  ggplot(aes(x=x,y=n,fill=Rating)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~Rating,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$lemma,
+                     expand = c(0,0)) + 
+  labs(title='Top Adjectives by Star Rating',
+       subtitle = paste0(nReviews,' reviews of iPhone X'),
+       x = 'Noun',
+       y = 'Count')+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+byStar.pl
+```
+
+
+```{r, fig.height=5.5,fig.width=10}
+reviewsAnnStar <- x %>%
+  inner_join(select(iPhoneXreviews,X1,Rating),by=c('doc_id'='X1')) 
+
+stats <- cooccurrence(x = filter(reviewsAnnStar, upos %in% c("NOUN", "ADJ")), 
+                      term = "lemma", 
+                      group = c("doc_id", "paragraph_id", "sentence_id"))
+
+wordnetwork <- head(stats,300)
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plAll <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences within same sentence", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plAll
+```
+
+```{r, fig.height=5.5,fig.width=10}
+
+stats <- cooccurrence(x = filter(reviewsAnnStar, upos %in% c("NOUN", "ADJ") & Rating %in% c(1,2,3)), 
+                      term = "lemma", 
+                      group = c("doc_id", "paragraph_id", "sentence_id"))
+
+
+wordnetwork <- head(stats,200)
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plLow <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences within same sentence - Dissatisfied Users",
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plLow
+
+```
+
+```{r, fig.height=5.5,fig.width=10}
+## How frequently do words follow one another?
+stats <- cooccurrence(x = reviewsAnnStar$lemma, 
+                      relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ"))
+
+wordnetwork <- head(stats,150)
+
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plAll <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences of Words Next to Each Other", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plAll
+```
+
+```{r, fig.height=5.5,fig.width=10}
+
+stats <- cooccurrence(x = reviewsAnnStar$lemma, 
+                      relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ") & 
+                        reviewsAnnStar$reviewRating %in% c(1,2,3))
+
+wordnetwork <- head(stats,150)
+
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plLow <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences of Words Next to Each Other - Dissatisfied Users", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plLow
+
+```
+
+```{r, fig.height=7,fig.width=10}
+
+tmpLeft <- reviewsAnnStar %>%
+  select(doc_id,paragraph_id,sentence_id,lemma,head_token_id,dep_rel,upos)
+
+tmpRight <- reviewsAnnStar %>%
+  select(doc_id,paragraph_id,sentence_id,token_id,lemma,upos)
+
+
+tmp2 <- tmpLeft %>%
+  left_join(tmpRight,
+            by=c('doc_id'='doc_id',
+                 'paragraph_id'='paragraph_id',
+                 'sentence_id'='sentence_id',
+                 'head_token_id'='token_id')
+  ) %>%
+  filter(dep_rel %in% "nsubj" & upos.x %in% c("NOUN") & upos.y %in% c("ADJ")) %>%
+  mutate(term = paste(lemma.y,lemma.x,sep=" ")) %>%
+  count(term,sort = T)
+
+
+plAll <- tmp2 %>%
+  head(40) %>%
+  ggplot(aes(x=fct_reorder(term,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip() +
+  labs(title='Top Keywords Extracted Using Dependency Parsing',
+       subtitle = paste0(nReviews,' reviews of iPhone X'),
+       x = 'Keyword',
+       y = 'Frequency')
+
+plAll
+```
+
+```{r, fig.height=7,fig.width=10}
+
+tmpLeft <- reviewsAnnStar %>%
+  filter(Rating %in% c(1,2,3)) %>%
+  select(doc_id,paragraph_id,sentence_id,lemma,head_token_id,dep_rel,upos)
+  
+
+tmpRight <- reviewsAnnStar %>%
+  filter(Rating %in% c(1,2,3)) %>%
+  select(doc_id,paragraph_id,sentence_id,token_id,lemma,upos)
+
+
+tmp2 <- tmpLeft %>%
+  left_join(tmpRight,
+            by=c('doc_id'='doc_id',
+                 'paragraph_id'='paragraph_id',
+                 'sentence_id'='sentence_id',
+                 'head_token_id'='token_id')
+  ) %>%
+  filter(dep_rel %in% "nsubj" & upos.x %in% c("NOUN") & upos.y %in% c("ADJ")) %>%
+  mutate(term = paste(lemma.y,lemma.x,sep=" ")) %>%
+  count(term,sort = T)
+
+
+plLow <- tmp2 %>%
+  head(40) %>%
+  ggplot(aes(x=fct_reorder(term,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip() +
+  labs(title='Top Keywords Extracted Using Dependency Parsing',
+       subtitle = 'For reviews rated 1, 2 or 3 stars',
+       x = 'Keyword',
+       y = 'Frequency')
+
+plLow
+```
+
+
+```{r, fig.height=5,fig.width=5}
+
+statsAll <- keywords_rake(x = reviewsAnnStar, 
+                       term = "token", 
+                       group = c("doc_id", "paragraph_id", "sentence_id"),
+                       relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ"),
+                       ngram_max = 4) %>%
+  filter(freq > 100) %>%
+  arrange(desc(freq))
+
+
+tmp <- statsAll %>%
+  filter(ngram %in% c(1,2)) %>%
+  group_by(ngram) %>%
+  arrange(desc(freq)) %>%
+  slice(1:20) %>%
+  ungroup() %>%
+  mutate(x = n():1)
+
+plAll <- tmp %>%
+  mutate(ngram=factor(paste0('ngram=',ngram))) %>%
+  ggplot(aes(x=x,y=freq,fill=ngram)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~ngram,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$keyword,
+                     expand = c(0,0)) + 
+  labs(title='Top Keywords',
+       subtitle = 'Extracted using RAKE',
+       x = 'Keyword',
+       y = 'Count')
+
+plAll  
+
+
+```
+
+```{r, fig.height=5, fig.width=5}
+statsLow <- keywords_rake(x = reviewsAnnStar, 
+                          term = "token", 
+                          group = c("doc_id", "paragraph_id", "sentence_id"),
+                          relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ") & 
+                            reviewsAnnStar$Rating %in% c(1,2,3),
+                          ngram_max = 4) %>%
+  filter(freq > 100) %>%
+  arrange(desc(freq))
+
+
+tmp <- statsAll %>%
+  filter(ngram %in% c(1,2)) %>%
+  group_by(ngram) %>%
+  arrange(desc(freq)) %>%
+  slice(1:20) %>%
+  ungroup() %>%
+  mutate(x = n():1)
+
+plLow <- tmp %>%
+  mutate(ngram=factor(paste0('ngram=',ngram))) %>%
+  ggplot(aes(x=x,y=freq,fill=ngram)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~ngram,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$keyword,
+                     expand = c(0,0)) + 
+  labs(title='Top Keywords - Dissatisfied Users',
+       subtitle = 'Extracted using RAKE',
+       x = 'Keyword',
+       y = 'Count')
+
+plLow
+```
+
+### iPhone 11 Pro Max POS Tagging
+
+```{r}
+iPhone11reviews <- filter(alldata, Type == 'iphone11promax')
+nReviews <- nrow(iPhone11reviews)
+
+x <- udpipe_annotate(udmodel_english, x = iPhone11reviews$Text, doc_id = as.numeric(iPhone11reviews$X1))
+x <- as.data.frame(x)
+x$doc_id <- as.numeric(x$doc_id)
+
+```
+
+```{r}
+all.pl <- x %>%
+  filter(upos=="NOUN") %>%
+  count(lemma,sort = T) %>%
+  slice(1:20) %>%
+  ggplot(aes(x=fct_reorder(lemma,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip()+
+  labs(title='Top Nouns Used in Reviews of iPhone 11 Pro Max ',
+       subtitle = paste0(nReviews,' reviews for iPhone 11 Pro Max'),
+       x = 'Noun',
+       y = 'Count')
+
+all.pl
+```
+
+```{r, fig.height=5.25,fig.width=9}
+
+tmp <- x %>%
+  filter(upos=="NOUN") %>%
+  inner_join(select(iPhone11reviews,X1,Rating),by=c('doc_id'='X1')) %>%
+  count(Rating,lemma) %>%
+  group_by(Rating) %>%
+  arrange(desc(n)) %>%
+  slice(1:30) %>%
+  filter(!lemma %in% c('phone', 'apple','iPhone','iphone')) %>%
+  ungroup() %>%
+  mutate(x = n():1)  # for plotting
+
+
+byStar.pl <- tmp %>%
+  mutate(Rating=factor(paste0(Rating,' star'))) %>%
+  ggplot(aes(x=x,y=n,fill=Rating)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~Rating,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                   labels = tmp$lemma,
+                   expand = c(0,0)) + 
+  labs(title='Top Nouns by Star Rating',
+       subtitle = paste0(nReviews,' reviews of iPhone 11 Pro Max'),
+       caption = 'Note: The nouns "iPhone", "Apple" and "Phone" has been removed.',
+       x = 'Noun',
+       y = 'Count')+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+byStar.pl
+```
+
+```{r, fig.height=5.25,fig.width=9}
+
+tmp <- x %>%
+  filter(upos=="ADJ") %>%
+  inner_join(select(iPhone11reviews,X1,Rating),by=c('doc_id'='X1')) %>%
+  count(Rating,lemma) %>%
+  group_by(Rating) %>%
+  arrange(desc(n)) %>%
+  slice(1:30) %>%
+  ungroup() %>%
+  mutate(x = n():1)  # for plotting
+
+byStar.pl <- tmp %>%
+  mutate(Rating=factor(paste0(Rating,' star'))) %>%
+  ggplot(aes(x=x,y=n,fill=Rating)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~Rating,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$lemma,
+                     expand = c(0,0)) + 
+  labs(title='Top Adjectives by Star Rating',
+       subtitle = paste0(nReviews,' reviews of iPhone 11 Pro Max'),
+       x = 'Noun',
+       y = 'Count')+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+byStar.pl
+```
+
+
+```{r, fig.height=5.5,fig.width=10}
+reviewsAnnStar <- x %>%
+  inner_join(select(iPhone11reviews,X1,Rating),by=c('doc_id'='X1')) 
+
+stats <- cooccurrence(x = filter(reviewsAnnStar, upos %in% c("NOUN", "ADJ")), 
+                      term = "lemma", 
+                      group = c("doc_id", "paragraph_id", "sentence_id"))
+
+wordnetwork <- head(stats,300)
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plAll <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences within same sentence", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plAll
+```
+
+```{r, fig.height=5.5,fig.width=10}
+
+stats <- cooccurrence(x = filter(reviewsAnnStar, upos %in% c("NOUN", "ADJ") & Rating %in% c(1,2,3)), 
+                      term = "lemma", 
+                      group = c("doc_id", "paragraph_id", "sentence_id"))
+
+
+wordnetwork <- head(stats,200)
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plLow <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences within same sentence - Dissatisfied Users",
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plLow
+
+```
+
+```{r, fig.height=5.5,fig.width=10}
+## How frequently do words follow one another?
+stats <- cooccurrence(x = reviewsAnnStar$lemma, 
+                      relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ"))
+
+wordnetwork <- head(stats,150)
+
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plAll <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences of Words Next to Each Other", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plAll
+```
+
+```{r, fig.height=5.5,fig.width=10}
+
+stats <- cooccurrence(x = reviewsAnnStar$lemma, 
+                      relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ") & 
+                        reviewsAnnStar$reviewRating %in% c(1,2,3))
+
+wordnetwork <- head(stats,150)
+
+wordnetwork <- graph_from_data_frame(wordnetwork)
+
+plLow <- ggraph(wordnetwork, layout = "fr") +
+  geom_edge_link(aes(width = cooc, edge_alpha = cooc), edge_colour = "pink",show.legend = F) +
+  geom_node_text(aes(label = name), col = "darkgreen", size = 3) +
+  labs(title = "Cooccurrences of Words Next to Each Other - Dissatisfied Users", 
+       subtitle = "Nouns & Adjective",
+       x = '',y='')+
+  theme_bw()
+
+plLow
+
+```
+
+```{r, fig.height=7,fig.width=10}
+
+tmpLeft <- reviewsAnnStar %>%
+  select(doc_id,paragraph_id,sentence_id,lemma,head_token_id,dep_rel,upos)
+
+tmpRight <- reviewsAnnStar %>%
+  select(doc_id,paragraph_id,sentence_id,token_id,lemma,upos)
+
+
+tmp2 <- tmpLeft %>%
+  left_join(tmpRight,
+            by=c('doc_id'='doc_id',
+                 'paragraph_id'='paragraph_id',
+                 'sentence_id'='sentence_id',
+                 'head_token_id'='token_id')
+  ) %>%
+  filter(dep_rel %in% "nsubj" & upos.x %in% c("NOUN") & upos.y %in% c("ADJ")) %>%
+  mutate(term = paste(lemma.y,lemma.x,sep=" ")) %>%
+  count(term,sort = T)
+
+
+plAll <- tmp2 %>%
+  head(40) %>%
+  ggplot(aes(x=fct_reorder(term,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip() +
+  labs(title='Top Keywords Extracted Using Dependency Parsing',
+       subtitle = paste0(nReviews,' reviews of iPhone 11 Pro Max'),
+       x = 'Keyword',
+       y = 'Frequency')
+
+plAll
+```
+
+```{r, fig.height=7,fig.width=10}
+
+tmpLeft <- reviewsAnnStar %>%
+  filter(Rating %in% c(1,2,3)) %>%
+  select(doc_id,paragraph_id,sentence_id,lemma,head_token_id,dep_rel,upos)
+  
+
+tmpRight <- reviewsAnnStar %>%
+  filter(Rating %in% c(1,2,3)) %>%
+  select(doc_id,paragraph_id,sentence_id,token_id,lemma,upos)
+
+
+tmp2 <- tmpLeft %>%
+  left_join(tmpRight,
+            by=c('doc_id'='doc_id',
+                 'paragraph_id'='paragraph_id',
+                 'sentence_id'='sentence_id',
+                 'head_token_id'='token_id')
+  ) %>%
+  filter(dep_rel %in% "nsubj" & upos.x %in% c("NOUN") & upos.y %in% c("ADJ")) %>%
+  mutate(term = paste(lemma.y,lemma.x,sep=" ")) %>%
+  count(term,sort = T)
+
+
+plLow <- tmp2 %>%
+  head(40) %>%
+  ggplot(aes(x=fct_reorder(term,n),y=n)) + 
+  geom_bar(stat='identity') + 
+  coord_flip() +
+  labs(title='Top Keywords Extracted Using Dependency Parsing',
+       subtitle = 'For reviews rated 1, 2 or 3 stars',
+       x = 'Keyword',
+       y = 'Frequency')
+
+plLow
+```
+
+
+```{r, fig.height=5,fig.width=5}
+
+statsAll <- keywords_rake(x = reviewsAnnStar, 
+                       term = "token", 
+                       group = c("doc_id", "paragraph_id", "sentence_id"),
+                       relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ"),
+                       ngram_max = 4) %>%
+  filter(freq > 100) %>%
+  arrange(desc(freq))
+
+
+tmp <- statsAll %>%
+  filter(ngram %in% c(1,2)) %>%
+  group_by(ngram) %>%
+  arrange(desc(freq)) %>%
+  slice(1:20) %>%
+  ungroup() %>%
+  mutate(x = n():1)
+
+plAll <- tmp %>%
+  mutate(ngram=factor(paste0('ngram=',ngram))) %>%
+  ggplot(aes(x=x,y=freq,fill=ngram)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~ngram,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$keyword,
+                     expand = c(0,0)) + 
+  labs(title='Top Keywords',
+       subtitle = 'Extracted using RAKE',
+       x = 'Keyword',
+       y = 'Count')
+
+plAll  
+
+
+```
+
+```{r, fig.height=5, fig.width=5}
+statsLow <- keywords_rake(x = reviewsAnnStar, 
+                          term = "token", 
+                          group = c("doc_id", "paragraph_id", "sentence_id"),
+                          relevant = reviewsAnnStar$upos %in% c("NOUN", "ADJ") & 
+                            reviewsAnnStar$Rating %in% c(1,2,3),
+                          ngram_max = 4) %>%
+  filter(freq > 100) %>%
+  arrange(desc(freq))
+
+
+tmp <- statsAll %>%
+  filter(ngram %in% c(1,2)) %>%
+  group_by(ngram) %>%
+  arrange(desc(freq)) %>%
+  slice(1:20) %>%
+  ungroup() %>%
+  mutate(x = n():1)
+
+plLow <- tmp %>%
+  mutate(ngram=factor(paste0('ngram=',ngram))) %>%
+  ggplot(aes(x=x,y=freq,fill=ngram)) + 
+  geom_bar(stat='identity',show.legend = F) + 
+  coord_flip() + 
+  facet_wrap(~ngram,scales='free',nrow = 1) +
+  scale_x_continuous(breaks = tmp$x,
+                     labels = tmp$keyword,
+                     expand = c(0,0)) + 
+  labs(title='Top Keywords - Dissatisfied Users',
+       subtitle = 'Extracted using RAKE',
+       x = 'Keyword',
+       y = 'Count')
+
+plLow
+```
